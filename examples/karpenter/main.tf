@@ -113,7 +113,7 @@ module "eks_blueprints" {
       from_port                     = 4443
       to_port                       = 4443
       type                          = "ingress"
-      source_cluster_security_group = true 
+      source_cluster_security_group = true
     }
   }
 
@@ -155,17 +155,17 @@ module "eks_blueprints_kubernetes_addons" {
 
   enable_amazon_eks_aws_ebs_csi_driver = true
   enable_aws_load_balancer_controller  = true
-  enable_metrics_server               = true
-  enable_karpenter = true
+  enable_metrics_server                = true
+  enable_karpenter                     = true
   # enable_kubecost                     = true
   # enable_aws_node_termination_handler = true
 
   tags = local.tags
 }
 
-# Deploying default provisioner and default-lt (using launch template) for Karpenter autoscaler
+# Deploying default provisioner for Karpenter autoscaler
 data "kubectl_path_documents" "karpenter_provisioners" {
-  pattern = "${path.module}/provisioners/default_provisioner*.yaml" # without launch template
+  pattern = "${path.module}/provisioners/default_provisioner*.yaml"
   vars = {
     azs                     = join(",", local.azs)
     iam-instance-profile-id = "${local.name}-${local.node_group_name}"
