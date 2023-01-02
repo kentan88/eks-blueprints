@@ -5,12 +5,7 @@ resource "helm_release" "alb_ingress" {
   timeout         = 120
   cleanup_on_fail = true
   force_update    = false
-  namespace       = kubernetes_namespace.istio_system.metadata.0.name
 
-  set {
-    name  = "meshConfig.accessLogFile"
-    value = "/dev/stdout"
-  }
 
-  depends_on = [module.eks_blueprints, helm_release.istio_base]
+  depends_on = [module.eks_blueprints, helm_release.ingressgateway]
 }
