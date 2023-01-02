@@ -31,10 +31,10 @@ locals {
   name = basename(path.cwd)
   # var.cluster_name is for Terratest
   cluster_name = coalesce(var.cluster_name, local.name)
-  region       = "us-west-2"
+  region       = "ap-southeast-1"
 
   vpc_cidr = "10.0.0.0/16"
-  azs      = slice(data.aws_availability_zones.available.names, 0, 3)
+  azs      = slice(data.aws_availability_zones.available.names, 0, 2)
 
   tags = {
     Blueprint  = local.name
@@ -58,10 +58,11 @@ module "eks_blueprints" {
   managed_node_groups = {
     mg_5 = {
       node_group_name = "managed-ondemand"
-      instance_types  = ["m5.large"]
-      min_size        = 3
-      max_size        = 3
-      desired_size    = 3
+      capacity_type   = "SPOT"
+      instance_types  = ["t3.large"]
+      min_size        = 2
+      max_size        = 2
+      desired_size    = 2
       subnet_ids      = module.vpc.private_subnets
     }
   }
@@ -86,20 +87,20 @@ module "eks_blueprints_kubernetes_addons" {
   # Add-ons
   enable_aws_load_balancer_controller = true
   enable_metrics_server               = true
-  enable_aws_cloudwatch_metrics       = true
-  enable_kubecost                     = true
-  enable_gatekeeper                   = true
-
-  enable_cluster_autoscaler = true
-  cluster_autoscaler_helm_config = {
-    set = [
-      {
-        name  = "podLabels.prometheus\\.io/scrape",
-        value = "true",
-        type  = "string",
-      }
-    ]
-  }
+  enable_karpenter                    = true
+  # enable_aws_cloudwatch_metrics       = true
+  # enable_kubecost                     = true
+  # enable_gatekeeper                   = true
+  # enable_cluster_autoscaler = true
+  # cluster_autoscaler_helm_config = {
+  #   set = [
+  #     {
+  #       name  = "podLabels.prometheus\\.io/scrape",
+  #       value = "true",
+  #       type  = "string",
+  #     }
+  #   ]
+  # }
 
   enable_cert_manager = true
   cert_manager_helm_config = {
@@ -115,6 +116,12 @@ module "eks_blueprints_kubernetes_addons" {
 
   tags = local.tags
 }
+
+
+
+
+
+
 
 #---------------------------------------------------------------
 # Supporting Resources

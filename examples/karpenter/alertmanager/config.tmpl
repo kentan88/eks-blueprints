@@ -1,0 +1,47 @@
+alertmanager:
+  config:
+    global:
+      resolve_timeout: 5m
+      slack_api_url: https://hooks.slack.com/services/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
+    inhibit_rules:
+    - equal:
+      - namespace
+      - alertname
+      source_matchers:
+      - severity = critical
+      target_matchers:
+      - severity =~ warning|info
+    - equal:
+      - namespace
+      - alertname
+      source_matchers:
+      - severity = warning
+      target_matchers:
+      - severity = info
+    - equal:
+      - namespace
+      source_matchers:
+      - alertname = InfoInhibitor
+      target_matchers:
+      - severity = info
+    receivers:
+    - name: slack
+      slack_configs:
+      - channel: '#alerts'
+        icon_emoji: ':bell:'
+        send_resolved: true
+        text: "<!channel> \nsummary: {{ .CommonAnnotations.summary }}\ndescription: {{
+          .CommonAnnotations.description }}\nmessage: {{ .CommonAnnotations.message }}"
+    route:
+      group_by:
+      - alertname
+      group_interval: 1m
+      group_wait: 5s
+      receiver: slack
+      repeat_interval: 10m
+      routes:
+      - matchers:
+        - alertname =~ "InfoInhibitor|Watchdog"
+        receiver: slack
+    templates:
+    - /etc/alertmanager/config/*.tmpl

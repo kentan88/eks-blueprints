@@ -32,9 +32,9 @@ data "aws_availability_zones" "available" {}
 
 locals {
   name   = basename(path.cwd)
-  region = "us-west-2"
+  region = "ap-southeast-1"
 
-  node_group_name = "managed-ondemand"
+  node_group_name = "managed-spot"
 
   vpc_cidr = "10.0.0.0/16"
   azs      = slice(data.aws_availability_zones.available.names, 0, 3)
@@ -53,7 +53,7 @@ module "eks_blueprints" {
   source = "../.."
 
   cluster_name    = local.name
-  cluster_version = "1.23"
+  cluster_version = "1.24"
 
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnets
@@ -96,11 +96,30 @@ module "eks_blueprints" {
       type                          = "ingress"
       source_cluster_security_group = true
     }
+
+    # for istio sidecar
+    ingress_nodes_istio_15017 = {
+      description                   = "Cluster API to Nodegroup for Istio sidecar"
+      protocol                      = "tcp"
+      from_port                     = 15017
+      to_port                       = 15017
+      type                          = "ingress"
+      source_cluster_security_group = true
+    }
+
+    ingress_cluster_metricserver = {
+      description                   = "Cluster to node 4443 (Metrics Server)"
+      protocol                      = "tcp"
+      from_port                     = 4443
+      to_port                       = 4443
+      type                          = "ingress"
+      source_cluster_security_group = true 
+    }
   }
 
   # Add karpenter.sh/discovery tag so that we can use this as securityGroupSelector in karpenter provisioner
   node_security_group_tags = {
-    "karpenter.sh/discovery/${local.name}" = local.name
+    "karpenter.sh/discovery" = local.name
   }
 
   # EKS MANAGED NODE GROUPS
@@ -108,17 +127,14 @@ module "eks_blueprints" {
   # Then rely on Karpenter to scale your workloads
   # You can also make uses on nodeSelector and Taints/tolerations to spread workloads on MNG or Karpenter provisioners
   managed_node_groups = {
-    mg_5 = {
+    mg_spot = {
       node_group_name = local.node_group_name
       instance_types  = ["m5.large"]
-
-      subnet_ids   = module.vpc.private_subnets
-      max_size     = 5
-      desired_size = 2
-      min_size     = 1
-      update_config = [{
-        max_unavailable_percentage = 30
-      }]
+      capacity_type   = "SPOT"
+      subnet_ids      = module.vpc.private_subnets
+      max_size        = 2
+      desired_size    = 2
+      min_size        = 2
 
       # Launch template configuration
       create_launch_template = true              # false will use the default launch template
@@ -138,111 +154,98 @@ module "eks_blueprints_kubernetes_addons" {
   eks_cluster_version  = module.eks_blueprints.eks_cluster_version
 
   enable_amazon_eks_aws_ebs_csi_driver = true
-
-  enable_karpenter                    = true
-  enable_aws_node_termination_handler = true
-  enable_kubecost                     = true
-
-  enable_datadog_operator = true
+  enable_aws_load_balancer_controller  = true
+  enable_metrics_server               = true
+  enable_karpenter = true
+  # enable_kubecost                     = true
+  # enable_aws_node_termination_handler = true
 
   tags = local.tags
 }
 
 # Creates Launch templates for Karpenter
 # Launch template outputs will be used in Karpenter Provisioners yaml files. Checkout this examples/karpenter/provisioners/default_provisioner_with_launch_templates.yaml
-module "karpenter_launch_templates" {
-  source = "../../modules/launch-templates"
+# module "karpenter_launch_templates" {
+#   source = "../../modules/launch-templates"
 
-  eks_cluster_id = module.eks_blueprints.eks_cluster_id
+#   eks_cluster_id = module.eks_blueprints.eks_cluster_id
 
-  launch_template_config = {
-    linux = {
-      ami                    = data.aws_ami.eks.id
-      launch_template_prefix = "karpenter"
-      iam_instance_profile   = module.eks_blueprints.managed_node_group_iam_instance_profile_id[0]
-      vpc_security_group_ids = [module.eks_blueprints.worker_node_security_group_id]
-      block_device_mappings = [
-        {
-          device_name = "/dev/xvda"
-          volume_type = "gp3"
-          volume_size = 200
-        }
-      ]
-    }
+#   launch_template_config = {
+#     linux = {
+#       ami                    = data.aws_ami.eks.id
+#       launch_template_prefix = "karpenter"
+#       iam_instance_profile   = module.eks_blueprints.managed_node_group_iam_instance_profile_id[0]
+#       vpc_security_group_ids = [module.eks_blueprints.worker_node_security_group_id]
+#       block_device_mappings = [
+#         {
+#           device_name = "/dev/xvda"
+#           volume_type = "gp3"
+#           volume_size = 40
+#         }
+#       ]
+#     }
+#   }
 
-    bottlerocket = {
-      ami                    = data.aws_ami.bottlerocket.id
-      launch_template_os     = "bottlerocket"
-      launch_template_prefix = "bottle"
-      iam_instance_profile   = module.eks_blueprints.managed_node_group_iam_instance_profile_id[0]
-      vpc_security_group_ids = [module.eks_blueprints.worker_node_security_group_id]
-      block_device_mappings = [
-        {
-          device_name = "/dev/xvda"
-          volume_type = "gp3"
-          volume_size = 200
-        }
-      ]
-    }
-  }
-
-  tags = merge(local.tags, { Name = "karpenter" })
-}
+#   tags = merge(local.tags, { Name = "karpenter" })
+# }
 
 # Deploying default provisioner and default-lt (using launch template) for Karpenter autoscaler
-data "kubectl_path_documents" "karpenter_provisioners" {
-  pattern = "${path.module}/provisioners/default_provisioner*.yaml" # without launch template
-  vars = {
-    azs                     = join(",", local.azs)
-    iam-instance-profile-id = "${local.name}-${local.node_group_name}"
-    eks-cluster-id          = local.name
-    eks-vpc_name            = local.name
-  }
-}
+# data "kubectl_path_documents" "karpenter_provisioners" {
+#   pattern = "${path.module}/provisioners/default_provisioner*.yaml" # without launch template
+#   vars = {
+#     azs                     = join(",", local.azs)
+#     iam-instance-profile-id = "${local.name}-${local.node_group_name}"
+#     eks-cluster-id          = local.name
+#     eks-vpc_name            = local.name
+#   }
+# }
+
+# resource "kubectl_manifest" "karpenter_provisioner" {
+#   for_each  = toset(data.kubectl_path_documents.karpenter_provisioners.documents)
+#   yaml_body = each.value
+
+#   depends_on = [module.eks_blueprints_kubernetes_addons]
+# }
 
 resource "kubectl_manifest" "karpenter_provisioner" {
-  for_each  = toset(data.kubectl_path_documents.karpenter_provisioners.documents)
-  yaml_body = each.value
-
-  depends_on = [module.eks_blueprints_kubernetes_addons]
-}
-
-#---------------------------------------------------------------
-# Datadog Operator
-#---------------------------------------------------------------
-
-resource "kubernetes_secret_v1" "datadog_api_key" {
-  metadata {
-    name      = "datadog-secret"
-    namespace = "datadog-operator"
-  }
-
-  data = {
-    # This will reveal a secret in the Terraform state
-    api-key = var.datadog_api_key
-  }
-
-  # Ensure the operator is deployed first
-  depends_on = [module.eks_blueprints_kubernetes_addons]
-}
-
-resource "kubectl_manifest" "datadog_agent" {
   yaml_body = <<-YAML
-    apiVersion: datadoghq.com/v1alpha1
-    kind: DatadogAgent
+    apiVersion: karpenter.sh/v1alpha5
+    kind: Provisioner
     metadata:
-      name: datadog
-      namespace: datadog-operator
+      name: default
     spec:
-      clusterName: ${module.eks_blueprints.eks_cluster_id}
-      credentials:
-        apiSecret:
-          secretName: ${kubernetes_secret_v1.datadog_api_key.metadata[0].name}
-          keyName: api-key
-      features:
-        kubeStateMetricsCore:
-          enabled: true
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot"]
+      limits:
+        resources:
+          cpu: 1000
+      providerRef:
+        name: default
+      ttlSecondsAfterEmpty: 30
   YAML
+
+  depends_on = [module.eks_blueprints_kubernetes_addons]
+}
+
+resource "kubectl_manifest" "karpenter_node_template" {
+  yaml_body = <<-YAML
+    apiVersion: karpenter.k8s.aws/v1alpha1
+    kind: AWSNodeTemplate
+    metadata:
+      name: default
+    spec:
+      instanceProfile: "${local.name}-${local.node_group_name}"
+      subnetSelector:
+        karpenter.sh/discovery: "true"
+      securityGroupSelector:
+        karpenter.sh/discovery: ${local.name}
+      tags:
+        karpenter.sh/discovery: ${local.name}
+  YAML
+
+  depends_on = [module.eks_blueprints_kubernetes_addons]
 }
 
 #---------------------------------------------------------------
@@ -280,6 +283,7 @@ module "vpc" {
   private_subnet_tags = {
     "kubernetes.io/cluster/${local.name}" = "shared"
     "kubernetes.io/role/internal-elb"     = 1
+    "karpenter.sh/discovery"              = "true"
   }
 
   tags = local.tags
@@ -292,15 +296,5 @@ data "aws_ami" "eks" {
   filter {
     name   = "name"
     values = ["amazon-eks-node-${module.eks_blueprints.eks_cluster_version}-*"]
-  }
-}
-
-data "aws_ami" "bottlerocket" {
-  owners      = ["amazon"]
-  most_recent = true
-
-  filter {
-    name   = "name"
-    values = ["bottlerocket-aws-k8s-${module.eks_blueprints.eks_cluster_version}-x86_64-*"]
   }
 }

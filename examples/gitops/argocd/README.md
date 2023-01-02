@@ -46,6 +46,7 @@ The following command will update the `kubeconfig` on your local machine and all
 
     ```sh
     aws eks --region <REGION> update-kubeconfig --name <CLUSTER_NAME>
+    aws eks --region ap-southeast-1 update-kubeconfig --name argocd
     ```
 
 2. List out the pods running currently:
@@ -128,6 +129,7 @@ The following command will update the `kubeconfig` on your local machine and all
 
     ```sh
     aws secretsmanager get-secret-value --secret-id <SECRET_NAME>--region <REGION>
+    aws secretsmanager get-secret-value --secret-id argocd --region ap-southeast-1
     ```
 
     Replace `<SECRET_NAME>` with the name of the secret name, if you haven't changed it then it should be `argocd`, also, make sure to replace `<REGION>` with the region you are using.

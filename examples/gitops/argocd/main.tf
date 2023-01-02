@@ -27,10 +27,10 @@ data "aws_availability_zones" "available" {}
 
 locals {
   name   = basename(path.cwd)
-  region = "us-west-2"
+  region = "ap-southeast-1"
 
   vpc_cidr = "10.0.0.0/16"
-  azs      = slice(data.aws_availability_zones.available.names, 0, 3)
+  azs      = slice(data.aws_availability_zones.available.names, 0, 2)
 
   tags = {
     Blueprint  = local.name
@@ -57,8 +57,8 @@ module "eks_blueprints" {
       instance_types  = ["m5.large"]
       subnet_ids      = module.vpc.private_subnets
 
-      desired_size = 5
-      max_size     = 10
+      desired_size = 3
+      max_size     = 3
       min_size     = 3
     }
   }
