@@ -160,6 +160,24 @@ module "eks_blueprints_kubernetes_addons" {
   # enable_kubecost                     = true
   # enable_aws_node_termination_handler = true
 
+
+  # https://github.com/aws-ia/terraform-aws-eks-blueprints/blob/main/examples/analytics/emr-on-eks/helm-values/vpa-values.yaml
+  #---------------------------------------
+  # Vertical Pod Autoscaling
+  #---------------------------------------
+  # enable_vpa = true
+  # vpa_helm_config = {
+  #   name       = "vpa"
+  #   repository = "https://charts.fairwinds.com/stable" # (Optional) Repository URL where to locate the requested chart.
+  #   chart      = "vpa"
+  #   version    = "1.4.0"
+  #   namespace  = "vpa"
+  #   timeout    = "300"
+  #   values = [templatefile("${path.module}/helm-values/vpa-values.yaml", {
+  #     operating_system = "linux"
+  #   })]
+  # }
+
   tags = local.tags
 }
 
